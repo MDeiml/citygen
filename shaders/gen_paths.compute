@@ -1,0 +1,93 @@
+#version 430
+
+const uvec3 CELL_SIZE = uvec3(8, 4, 8);
+const uvec3 OUTPUT_SIZE = uvec3(128, 128, 128);
+const uvec3 OUTPUT_SIZE_GROUP = uvec3(8, 8, 8);
+const uvec3 NUM_GROUPS = OUTPUT_SIZE / CELL_SIZE;
+
+layout (local_size_x = 10, local_size_y = 10, local_size_z = 10) in;
+
+shared uint path_offset[10][10][10];
+
+layout (std430, binding = 0) buffer voxel_buffer {
+    uvec2 voxels[];
+};
+
+// Can't use atomic counter because glium doesn't support it
+// Can't put counter in voxel_buffer because glium doesn't support it
+layout (binding = 1) buffer voxel_counter_buffer {
+    uint voxel_counter;
+};
+
+uvec3 get_path_offset(uvec3 v) {
+    return (path_offset[v.x][v.y][v.z] / uvec3(1, CELL_SIZE.x, CELL_SIZE.x * CELL_SIZE.y)) % CELL_SIZE;
+}
+
+void set_path_offset(uvec3 data) {
+    data.yz *= uvec2(CELL_SIZE.x, CELL_SIZE.x * CELL_SIZE.y);
+    path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = data.x + data.y + data.z;
+}
+
+float rand(vec2 v) {
+    return fract(sin(dot(v, vec2(12.9898,78.233))) * 43758.5453);
+}
+
+void main() {
+    uvec3 pos = gl_LocalInvocationID + 8 * gl_WorkGroupID;
+    uvec3 pos1 = pos * uvec3(1, NUM_GROUPS.x, NUM_GROUPS.x * NUM_GROUPS.y);
+    float r = rand(vec2(pos1.x + pos1.y + pos1.z, 0.2));
+    path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = uint(rand(vec2(r, 0.0)) * float(CELL_SIZE.x * CELL_SIZE.y * CELL_SIZE.z));
+    uvec3 offset = get_path_offset(gl_LocalInvocationID);
+    uint align = uint(rand(vec2(r, 1.0)) * 4.0);
+    for (uint i = 0; i < 2; i++) {
+        barrier();
+        if ((align & 1u) != 0 && gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1) {
+            offset.z = get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).z;
+        }
+        if ((align & 2u) != 0 && gl_LocalInvocationID.z < gl_WorkGroupSize.z - 1) {
+            offset.x = get_path_offset(gl_LocalInvocationID + uvec3(0, 0, 1)).x;
+        }
+        barrier();
+        set_path_offset(offset);
+    }
+    barrier();
+
+    align = 0;
+    if (all(lessThan(gl_LocalInvocationID, OUTPUT_SIZE_GROUP))) {
+        if (get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).z == offset.z) {
+            align |= 1u;
+            ivec2 dist = ivec2(get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).xy) + ivec2(CELL_SIZE.x, 0) - ivec2(offset.xy);
+            for (int i = 0; i < dist.x; i++) {
+                uvec3 offset1 = uvec3(ivec3(offset) + ivec3(i, i * dist.y / dist.x, 0));
+                offset1 += pos * CELL_SIZE;
+                offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
+                uint index = atomicAdd(voxel_counter, 1);
+                voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 0x00ffff);
+            }
+        }
+        if (get_path_offset(gl_LocalInvocationID + uvec3(0, 0, 1)).x == offset.x) {
+            align |= 2u;
+            ivec2 dist = ivec2(get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).zy) + ivec2(CELL_SIZE.z, 0) - ivec2(offset.zy);
+            for (int i = 0; i < dist.x; i++) {
+                uvec3 offset1 = uvec3(ivec3(offset) + ivec3(0, i * dist.y / dist.x, i));
+                offset1 += pos * CELL_SIZE;
+                offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
+                uint index = atomicAdd(voxel_counter, 1);
+                voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 0x00ff00);
+            }
+        }
+
+        offset += pos * CELL_SIZE;
+        uint color = 0xff0000;
+        if ((align & 1u) != 0) {
+            color |= 0xff00;
+        }
+        if ((align & 2u) != 0) {
+            color |= 0xff;
+        }
+        offset.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
+        uint index = atomicAdd(voxel_counter, 1);
+        voxels[index] = uvec2(offset.x + offset.y + offset.z, color);
+    }
+}
+
