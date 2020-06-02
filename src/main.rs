@@ -100,10 +100,8 @@ fn main() {
 
     let mut voxel_counter = glium::buffer::Buffer::new(
         &display,
-        &VoxelCounter {
-            voxel_counter: 0u32,
-        },
-        glium::buffer::BufferType::ShaderStorageBuffer,
+        &0u32,
+        glium::buffer::BufferType::AtomicCounterBuffer,
         glium::buffer::BufferMode::Persistent,
     )
     .unwrap();
@@ -117,14 +115,14 @@ fn main() {
     gen_paths_shader.execute(
         uniform! {
             voxel_buffer: &voxel_buffer,
-            voxel_counter_buffer: &voxel_counter,
+            voxel_counter: &voxel_counter,
         },
         1,
         1,
         1,
     );
 
-    let count = voxel_counter.map_read().voxel_counter;
+    let count = *voxel_counter.map_read();
     println!("{}", count);
 
     build_octree(
