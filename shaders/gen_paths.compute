@@ -3,11 +3,13 @@
 const uvec3 CELL_SIZE = uvec3(8, 4, 8);
 const uvec3 OUTPUT_SIZE = uvec3(128, 128, 128);
 const uvec3 OUTPUT_SIZE_GROUP = uvec3(8, 8, 8);
+const uvec3 OUTPUT_OFFSET_GROUP = uvec3(0, 1, 0);
 const uvec3 NUM_GROUPS = OUTPUT_SIZE / CELL_SIZE;
 
 layout (local_size_x = 10, local_size_y = 10, local_size_z = 10) in;
 
 shared uvec3 path_offset[10][10][10];
+shared uint align [10][10][10];
 
 layout (std430, binding = 0) restrict buffer voxel_buffer {
     uvec2 voxels[];
@@ -19,6 +21,10 @@ layout (binding = 0) uniform atomic_uint voxel_counter;
 
 uvec3 get_path_offset(uvec3 v) {
     return path_offset[v.x][v.y][v.z];
+}
+
+uint get_align(uvec3 v) {
+    return align[v.x][v.y][v.z];
 }
 
 float rand(vec2 v) {
@@ -38,18 +44,19 @@ void main() {
     path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z].y = bitfieldExtract(get_path_offset(gl_LocalInvocationID).x, 3, 2);
     path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z].x = bitfieldExtract(get_path_offset(gl_LocalInvocationID).x, 0, 3);
 
-    uint align = uint(step(0.33, rand(vec2(r, 1.0))));
-    align |= uint(step(0.33, rand(vec2(r, 2.0)))) << 1;
-    if (align == 0) {
-        align = uint(rand(vec2(r, 3.0)) * 2.0 + 1.0);
+    align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = uint(step(0.33, rand(vec2(r, 1.0))));
+    if (get_align(gl_LocalInvocationID) == 0) {
+        align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = uint(rand(vec2(r, 3.0)) * 2.0 + 1.0);
     }
+    align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] |= uint(step(0.33, rand(vec2(r, 2.0)))) << 1;
+    align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] |= uint(rand(vec2(r, 2.0)) * 3.0) << 2;
     for (uint i = 0; i < 2; i++) {
         barrier();
         uvec2 temp = get_path_offset(gl_LocalInvocationID).xz;
-        if ((align & 1u) != 0 && gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1) {
+        if ((get_align(gl_LocalInvocationID) & 1u) != 0 && gl_LocalInvocationID.x < gl_WorkGroupSize.x - 1) {
             temp.y = get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).z;
         }
-        if ((align & 2u) != 0 && gl_LocalInvocationID.z < gl_WorkGroupSize.z - 1) {
+        if ((get_align(gl_LocalInvocationID) & 2u) != 0 && gl_LocalInvocationID.z < gl_WorkGroupSize.z - 1) {
             temp.x = get_path_offset(gl_LocalInvocationID + uvec3(0, 0, 1)).x;
         }
         barrier();
@@ -59,39 +66,43 @@ void main() {
     path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] += (gl_LocalInvocationID + 8 * gl_WorkGroupID) * CELL_SIZE;
     barrier();
 
-    align = 0;
-    if (all(lessThan(gl_LocalInvocationID, OUTPUT_SIZE_GROUP))) {
+    align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] = 0;
+    if (all(lessThan(gl_LocalInvocationID, OUTPUT_SIZE_GROUP + OUTPUT_OFFSET_GROUP)) &&
+        all(greaterThanEqual(gl_LocalInvocationID, OUTPUT_OFFSET_GROUP))) {
         if (get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).z == get_path_offset(gl_LocalInvocationID).z) {
-            align |= 1u;
+            align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] |= 1u;
             ivec2 dist = ivec2(get_path_offset(gl_LocalInvocationID + uvec3(1, 0, 0)).xy) - ivec2(get_path_offset(gl_LocalInvocationID).xy);
             for (int i = 0; i < dist.x; i++) {
-                uvec3 offset1 = uvec3(ivec3(get_path_offset(gl_LocalInvocationID)) + ivec3(i, i * dist.y / dist.x, 0));
+                uvec3 offset1 = uvec3(ivec3(get_path_offset(gl_LocalInvocationID)) + ivec3(i, i * dist.y / dist.x, 0)) - OUTPUT_OFFSET_GROUP;
                 offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
                 uint index = atomicCounterIncrement(voxel_counter);
                 voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 0x00ffff);
             }
         }
         if (get_path_offset(gl_LocalInvocationID + uvec3(0, 0, 1)).x == get_path_offset(gl_LocalInvocationID).x) {
-            align |= 2u;
+            align[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] |= 2u;
             ivec2 dist = ivec2(get_path_offset(gl_LocalInvocationID + uvec3(0, 0, 1)).zy) - ivec2(get_path_offset(gl_LocalInvocationID).zy);
             for (int i = 0; i < dist.x; i++) {
-                uvec3 offset1 = uvec3(ivec3(get_path_offset(gl_LocalInvocationID)) + ivec3(0, i * dist.y / dist.x, i));
+                uvec3 offset1 = uvec3(ivec3(get_path_offset(gl_LocalInvocationID)) + ivec3(0, i * dist.y / dist.x, i)) - OUTPUT_OFFSET_GROUP;
                 offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
                 uint index = atomicCounterIncrement(voxel_counter);
                 voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 0x00ff00);
             }
         }
 
-        uint color = 0xff0000;
-        if ((align & 1u) != 0) {
-            color |= 0xff00u;
+        if (get_align(gl_LocalInvocationID) != 0) {
+            uint color = 0xff0000;
+            if ((get_align(gl_LocalInvocationID) & 1u) != 0) {
+                color |= 0xff00u;
+            }
+            if ((get_align(gl_LocalInvocationID) & 2u) != 0) {
+                color |= 0xffu;
+            }
+            path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z] -= OUTPUT_OFFSET_GROUP;
+            path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z].yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
+            uint index = atomicCounterIncrement(voxel_counter);
+            voxels[index] = uvec2(get_path_offset(gl_LocalInvocationID).x + get_path_offset(gl_LocalInvocationID).y + get_path_offset(gl_LocalInvocationID).z, color);
         }
-        if ((align & 2u) != 0) {
-            color |= 0xffu;
-        }
-        path_offset[gl_LocalInvocationID.x][gl_LocalInvocationID.y][gl_LocalInvocationID.z].yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
-        uint index = atomicCounterIncrement(voxel_counter);
-        voxels[index] = uvec2(get_path_offset(gl_LocalInvocationID).x + get_path_offset(gl_LocalInvocationID).y + get_path_offset(gl_LocalInvocationID).z, color);
     }
 }
 
