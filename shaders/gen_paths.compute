@@ -108,7 +108,7 @@ void main() {
                     uvec3 offset1 = uvec3(ivec3(get_path_offset(gl_LocalInvocationID)) + ivec3(i, i * dist.y / dist.x, 0)) - OUTPUT_OFFSET_GROUP * CELL_SIZE;
                     offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
                     uint index = atomicCounterIncrement(voxel_counter);
-                    voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 0x00ffff);
+                    voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 9);
                 }
             }
         }
@@ -121,7 +121,7 @@ void main() {
                     uvec3 offset1 = uvec3(ivec3(get_path_offset(gl_LocalInvocationID)) + ivec3(0, i * dist.y / dist.x, i)) - OUTPUT_OFFSET_GROUP * CELL_SIZE;
                     offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
                     uint index = atomicCounterIncrement(voxel_counter);
-                    voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 0x00ff00);
+                    voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 9);
                 }
             }
         }
@@ -137,7 +137,7 @@ void main() {
             uvec3 offset1 = get_path_offset(gl_LocalInvocationID) - OUTPUT_OFFSET_GROUP * CELL_SIZE;
             offset1.yz *= uvec2(OUTPUT_SIZE.x, OUTPUT_SIZE.x * OUTPUT_SIZE.y);
             uint index = atomicCounterIncrement(voxel_counter);
-            voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, color);
+            voxels[index] = uvec2(offset1.x + offset1.y + offset1.z, 9);
         }
     }
 }

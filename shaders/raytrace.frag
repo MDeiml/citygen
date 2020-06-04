@@ -5,7 +5,7 @@ in vec3 world_position;
 
 const vec3 SVO_SIZE = vec3(128.0, 128.0, 128.0);
 const vec3 SVO_POSITION = vec3(0.0, 0.0, 0.0);
-const uint MAX_DEPTH = 7;
+const uint MAX_DEPTH = 7 + 5;
 const uint MAX_ITERATIONS = MAX_DEPTH * 100;
 const float EPS = 0.0001;
 
@@ -15,7 +15,7 @@ layout(std430, binding = 0) buffer octree_buffer {
     uint octree[];
 };
 
-vec4 raytrace(vec3 pos, vec3 dir) {
+uint raytrace(vec3 pos, vec3 dir, out vec3 normal) {
     vec3 not_zero = step(0.0001, abs(dir));
     dir = mix(vec3(0.0001), dir, not_zero);
     vec3 dt = 1.0 / dir;
@@ -26,8 +26,9 @@ vec4 raytrace(vec3 pos, vec3 dir) {
     vec3 t_max0 = max(t1, t2);
     float t_min = max(t_min0.x, max(t_min0.y, t_min0.z));
     float t_max = min(t_max0.x, min(t_max0.y, t_max0.z));
+    normal = -step(t_min, t_min0) * sign(dir);
     if (t_max < t_min || t_max < 0.0) {
-        return vec4(0.0, 0.0, 0.0, 1.0);
+        return 0;
     }
     t = max(0.0, t_min);
 
@@ -53,28 +54,34 @@ vec4 raytrace(vec3 pos, vec3 dir) {
         if (index == 0) {
             t_max0 = max((cell_max - pos) * dt, (cell_min - pos) * dt);
             t = min(t_max0.x, min(t_max0.y, t_max0.z)) + EPS;
+            normal = -step(t_max0, vec3(t)) * sign(dir);
             if (t >= t_max) {
-                return vec4(0.0, 0.0, 0.0, 0.0);
+                return 0;
             }
             pos1 = t * dir + pos;
             cell_min = SVO_POSITION;
             cell_max = SVO_POSITION + SVO_SIZE;
             depth = 0;
         } else if (depth == MAX_DEPTH) {
-            return vec4(
-                bitfieldExtract(index, 16, 8),
-                bitfieldExtract(index, 8, 8),
-                bitfieldExtract(index, 0, 8),
-                255.0
-            ) / 255.0;
+            // 0xfb007d
+            // 251 0 125
+            return index | 0xff000000;
         }
     }
 
-    return vec4(1.0, 0.0, 0.0, 1.0);
+    return 0xffff0000;
 }
 
 void main() {
     vec3 dir = normalize(world_position - cam_position);
-    color = raytrace(cam_position, dir);
+    vec3 normal;
+    uint index = raytrace(cam_position, dir, normal);
+    color = vec4(
+        bitfieldExtract(index, 16, 8),
+        bitfieldExtract(index, 8, 8),
+        bitfieldExtract(index, 0, 8),
+        bitfieldExtract(index, 24, 8)
+    ) / 255.0;
+    color.rgb *= min(max(dot(normal, normalize(vec3(-1.0, 2.0, -3.0))), 0.0) + 0.05, 1.0);
 }
 

@@ -4,7 +4,7 @@ extern crate nalgebra as na;
 use glium::Surface;
 
 mod octree;
-use octree::build_octree;
+use octree::{build_octree, load_point_cloud};
 
 const FPS: u64 = 60;
 const DELTA: f32 = 1.0 / FPS as f32;
@@ -117,9 +117,17 @@ fn main() {
             voxel_buffer: &voxel_buffer,
             voxel_counter: &voxel_counter,
         },
-        1,
-        1,
-        1,
+        2,
+        4,
+        2,
+    );
+
+    let start_index = build_octree(
+        octree_buffer.map(),
+        load_point_cloud("./voxels/path.ply", 32).unwrap(),
+        5,
+        18,
+        9,
     );
 
     let count = *voxel_counter.map_read();
@@ -127,9 +135,10 @@ fn main() {
 
     build_octree(
         octree_buffer.map(),
-        voxel_buffer.map_read(),
-        count as usize,
+        voxel_buffer.map_read().iter().take(count as usize).copied(),
         7,
+        start_index,
+        0,
     );
 
     let mut cam_position = na::Vector3::new(0.0, 0.0, 0.0);
