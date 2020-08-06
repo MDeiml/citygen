@@ -87,7 +87,7 @@ fn main() {
     let mut voxel_buffer = glium::buffer::Buffer::<[(u32, u32)]>::empty_unsized(
         &display,
         glium::buffer::BufferType::ShaderStorageBuffer,
-        16 * 16 * 32 * 16 * 8,
+        128 * 16 * 32 * 16 * 8,
         glium::buffer::BufferMode::Persistent,
     )
     .unwrap();
@@ -108,7 +108,7 @@ fn main() {
 
     let gen_paths_shader = glium::program::ComputeShader::from_source(
         &display,
-        &std::fs::read_to_string("shaders/gen_paths.compute").unwrap(),
+        &std::fs::read_to_string("shaders/gen_paths.comp").unwrap(),
     )
     .unwrap();
 
@@ -117,18 +117,37 @@ fn main() {
             voxel_buffer: &voxel_buffer,
             voxel_counter: &voxel_counter,
         },
+        4,
+        3,
+        2,
+    );
+
+    /*
+    let gen_houses_shader = glium::program::ComputeShader::from_source(
+        &display,
+        &std::fs::read_to_string("shaders/gen_houses.comp").unwrap(),
+    )
+    .unwrap();
+
+    gen_houses_shader.execute(
+        uniform! {
+            voxel_buffer: &voxel_buffer,
+            voxel_counter: &voxel_counter,
+        },
         2,
         4,
         2,
     );
+    */
 
-    let start_index = build_octree(
-        octree_buffer.map(),
-        load_point_cloud("./voxels/path.ply", 32).unwrap(),
-        5,
-        18,
-        9,
-    );
+    // let start_index = build_octree(
+    //     octree_buffer.map(),
+    //     load_point_cloud("./voxels/path.ply", 32).unwrap(),
+    //     5,
+    //     18,
+    //     9,
+    // );
+    let start_index = 9;
 
     let count = *voxel_counter.map_read();
     println!("{}", count);
