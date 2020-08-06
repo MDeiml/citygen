@@ -5,7 +5,7 @@ in vec3 world_position;
 
 const vec3 SVO_SIZE = vec3(128.0, 128.0, 128.0);
 const vec3 SVO_POSITION = vec3(0.0, 0.0, 0.0);
-const uint MAX_DEPTH = 7 + 5;
+const uint MAX_DEPTH = 7;
 const uint MAX_ITERATIONS = MAX_DEPTH * 100;
 const float EPS = 0.0001;
 
