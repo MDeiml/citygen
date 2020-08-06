@@ -24,6 +24,8 @@ The restrictions are then solved by taking into account neighbouring cells.
 In the solving algorithm between two neighbours there is always a priority as to which cell should be changed.
 This way restrictions can be solved wihout creating new ones and the final result of structures of one cell depends only on calculations in a finite number of neighbouring cells.
 
+Most of the procedural generation can be run in a compute shader to use the graphics cards capabilities to enable real time generation.
+
 ### Walkways
 
 First a random position inside each cell and it is chosen if a cell should try to align itself with it positive X- and Z-axis neighbours or the neighbours above or below those cells.
@@ -51,3 +53,18 @@ This means each cell has the properties:
 | -------- | ------------------------ |
 | `offset` | `[(0, 0, 0), cell_size)` |
 | `size`   | `[min_size, cell_size)`  |
+
+It should then be shrunken so it does not intersect any neighbouring houses or paths.
+As before a priority should be chosen as to which of two neightbouring houses should be shrunken.
+
+## Artistic Design
+
+### Rendering
+
+This project will use Sparse Voxel Octree (SVO) raytracing for rendering, which enables many intersting lighting models.
+It uses Directed Acyclic Graphs (DAGs) instead of SVOs to save graphics memory, as the world can easily be subdivided into repeating "blocks".
+
+### Architecture
+
+The city should appear as if the houses are "self-built" meaning that houses should contain simple materials and feature "unprofessional" decorations such as open wires or pipes.
+Its inhabitants' technology should be ahead of the current state, meaning that there are some futuristic objects and machines, but technology should be used rather primitively, as if there was no deeper understanding into how it works.
